@@ -28,7 +28,7 @@ helm install vcluster-monitoring ./helm \
 | `prometheus.password` | `""` | Optional basic-auth password. |
 | `prometheus.insecure` | `false` | Skip TLS verification. |
 | `clusterName` | `default-cluster` | Value applied as the `cluster` label on every series and as `k8s.cluster.name` resource attribute. |
-| `extraHeaders` | `{}` | HTTP headers added to every remote-write request. Mimir: `{X-Scope-OrgID: my-tenant}`. |
+| `extraHeaders` | `{}` | HTTP headers added to every remote-write request, e.g. `{Authorization: 'Bearer ...'}`. |
 | `replicaCount` | `2` | Collector pod count. The Target Allocator distributes scrape targets across them — bump if your tenant ServiceMonitor count grows past ~50. |
 | `resources` | requests 250m/512Mi, limits 1Gi memory | Per-pod resources. |
 | `image.repository` | `otel/opentelemetry-collector-contrib` | Must be the **`-contrib`** variant — the upstream image doesn't include `k8sattributes`. |

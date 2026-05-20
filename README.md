@@ -95,14 +95,6 @@ helm install vcluster-monitoring . \
   --set clusterName=prod-east-1
 ```
 
-For **Mimir multi-tenant** setups, add the tenant header:
-
-```bash
-helm install vcluster-monitoring . \
-  ... \
-  --set 'extraHeaders.X-Scope-OrgID=tenant-foo'
-```
-
 For basic auth (e.g. Grafana Cloud):
 
 ```bash
@@ -171,7 +163,7 @@ sources to refresh.
 
 Anything that speaks **Prometheus remote write**:
 
-- **Mimir** — set `extraHeaders.X-Scope-OrgID` for multi-tenant
+- **Mimir** — point at the distributor's `/api/v1/push`
 - **VictoriaMetrics** (vmsingle / vmcluster) — direct write to `:8428/api/v1/write`
 - **Prometheus** — needs `--enable-feature=remote-write-receiver`
 - **Thanos** — point at the Receive component
