@@ -1,6 +1,5 @@
 # jsonnet-bundler vendored deps — regenerate via `make vendor`
 mixin/vendor/
 
-# helm dependency archives
+# helm dependency archives (regenerated from Chart.yaml + Chart.lock)
 collector/helm/charts/
-collector/helm/Chart.lock
