@@ -7,7 +7,7 @@ separately:
 
 | Directory | What it is | Who needs it |
 | --- | --- | --- |
-| [`mixin/`](mixin/) | [Jsonnet monitoring mixin](https://monitoring.mixins.dev/) — dashboards + alerts + recording rules. Slots into the customer's existing [`kubernetes-monitoring/kubernetes-mixin`](https://github.com/kubernetes-monitoring/kubernetes-mixin) build the same way that mixin does. | Anyone whose metrics already carry `vcluster_*` identity labels. |
+| [`mixin/`](mixin/) | [Jsonnet monitoring mixin](https://monitoring.mixins.dev/) — dashboards + alerts + recording rules. Slots into existing [`kubernetes-monitoring/kubernetes-mixin`](https://github.com/kubernetes-monitoring/kubernetes-mixin) build. | Anyone whose metrics already carry `vcluster_*` identity labels. |
 | [`collector/`](collector/) | Reference OpenTelemetry collector Helm chart. Produces the `vcluster_*` labels via the [`k8sattributes` processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/k8sattributesprocessor) so the mixin's queries have something to read. | Anyone whose pipeline doesn't already enrich metrics with vCluster identity. |
 
 ## Architecture
