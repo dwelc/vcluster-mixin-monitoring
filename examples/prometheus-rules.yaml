@@ -1,0 +1,15 @@
+groups:
+    - name: vcluster.rules
+      rules:
+        - expr: sum by (cluster, vcluster_project, vcluster_name) (rate(apiserver_request_total{vcluster_name!=""}[5m]))
+          record: vcluster:apiserver_request:rate5m
+        - expr: sum by (cluster, vcluster_project, vcluster_name) (rate(apiserver_request_total{code=~"5..", vcluster_name!=""}[5m]))
+          record: vcluster:apiserver_request:error_rate5m
+        - expr: histogram_quantile(0.99, sum by (cluster, vcluster_project, vcluster_name, le) (rate(apiserver_request_duration_seconds_bucket{verb!~"WATCH|WATCHLIST", vcluster_name!=""}[5m])))
+          record: vcluster:apiserver_request_duration_seconds:p99_5m
+        - expr: sum by (cluster, vcluster_project, vcluster_name) (rate(container_cpu_usage_seconds_total{vcluster_name!="", container!=""}[5m]))
+          record: vcluster:pod_cpu:usage_5m
+        - expr: sum by (cluster, vcluster_project, vcluster_name) (container_memory_working_set_bytes{vcluster_name!="", container!=""})
+          record: vcluster:pod_memory:usage
+        - expr: count by (cluster, vcluster_project, vcluster_name) (group by (cluster, vcluster_project, vcluster_name, k8s_pod_name) (container_memory_working_set_bytes{vcluster_name!="", k8s_pod_name!=""}))
+          record: vcluster:pod:count

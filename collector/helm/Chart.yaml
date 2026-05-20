@@ -1,0 +1,20 @@
+apiVersion: v2
+name: vcluster-monitoring
+description: vCluster shared-nodes monitoring — OpenTelemetry collector producing vcluster_* labels for prometheusremotewrite.
+type: application
+version: 0.0.1
+appVersion: "0.144.0"
+keywords:
+  - vcluster
+  - monitoring
+  - opentelemetry
+  - prometheus
+home: https://github.com/dwelc/vcluster-mixin-monitoring
+sources:
+  - https://github.com/dwelc/vcluster-mixin-monitoring
+dependencies:
+  - name: opentelemetry-kube-stack
+    version: 0.14.4
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+    # Customers who already run the OTel operator can disable this dep.
+    condition: opentelemetry-kube-stack.enabled

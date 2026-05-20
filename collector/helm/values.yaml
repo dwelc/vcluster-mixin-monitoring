@@ -1,0 +1,65 @@
+# Required. Base URL of the remote-write backend. The collector appends /api/v1/write.
+# Examples:
+#   Mimir:           https://mimir.example.com/api/v1/push       (set without /api/v1/write — Mimir is fine either way)
+#   VictoriaMetrics: http://vmsingle.monitoring.svc.cluster.local:8428
+#   Prometheus:      http://prometheus.monitoring.svc.cluster.local:9090
+prometheus:
+  endpoint: ""
+  username: ""
+  password: ""
+  insecure: false
+
+# Applied as the `cluster` label on every series.
+clusterName: default-cluster
+
+# HTTP headers on every remote-write request.
+# Mimir multi-tenant: { X-Scope-OrgID: my-tenant }
+extraHeaders: {}
+
+# Number of collector replicas. The Target Allocator distributes scrape targets across them.
+replicaCount: 2
+
+# Collector pod resources.
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+# OpenTelemetryCollector image. Must be the `-contrib` variant (k8sattributes processor).
+image:
+  repository: otel/opentelemetry-collector-contrib
+  tag: "0.144.0"
+
+# ServiceMonitor selector for the Target Allocator. The default {app: vcluster} matches
+# the ServiceMonitors that vCluster Platform creates per-tenant.
+serviceMonitorSelector:
+  matchLabels:
+    app: vcluster
+
+# Sub-chart settings. Disable both collectors — we manage the OpenTelemetryCollector CR
+# ourselves from templates/opentelemetrycollector.yaml so we can template against our
+# top-level values. The sub-chart still installs the operator + CRDs + RBAC + webhooks.
+opentelemetry-kube-stack:
+  enabled: true   # set false if you already run the OTel operator
+  crds:
+    installPrometheus: false
+  opentelemetry-operator:
+    enabled: true
+    manager:
+      collectorImage:
+        repository: otel/opentelemetry-collector-contrib
+      featureGatesMap:
+        operator.targetallocator.mtls: true
+    admissionWebhooks:
+      certManager:
+        enabled: false
+      autoGenerateCert:
+        enabled: true
+        recreate: true
+  collectors:
+    daemon:
+      enabled: false
+    cluster:
+      enabled: false

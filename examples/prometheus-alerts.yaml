@@ -1,0 +1,101 @@
+groups:
+    - name: vcluster-apiserver
+      rules:
+        - alert: VclusterAPIServerHighErrorRate
+          annotations:
+            description: apiserver in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}, cluster {{ $labels.cluster }}) has 5xx error rate {{ $value | humanizePercentage }} over the last 5 minutes.
+            summary: vCluster apiserver returning >5% 5xx errors
+          expr: |
+            vcluster:apiserver_request:error_rate5m
+              /
+            vcluster:apiserver_request:rate5m
+              > 0.05
+          for: 10m
+          labels:
+            severity: warning
+        - alert: VclusterAPIServerHighErrorRate
+          annotations:
+            description: apiserver in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}, cluster {{ $labels.cluster }}) has 5xx error rate {{ $value | humanizePercentage }} — likely down or saturated.
+            summary: vCluster apiserver returning >20% 5xx errors
+          expr: |
+            vcluster:apiserver_request:error_rate5m
+              /
+            vcluster:apiserver_request:rate5m
+              > 0.20
+          for: 5m
+          labels:
+            severity: critical
+        - alert: VclusterAPIServerSlowRequests
+          annotations:
+            description: p99 request latency for apiserver in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) is {{ $value | humanizeDuration }}.
+            summary: vCluster apiserver p99 latency >2s
+          expr: vcluster:apiserver_request_duration_seconds:p99_5m > 2
+          for: 10m
+          labels:
+            severity: warning
+    - name: vcluster-controlplane
+      rules:
+        - alert: VclusterControlPlanePodCrashLooping
+          annotations:
+            description: Pod {{ $labels.pod }} in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) restarted {{ $value }} times in 15 minutes.
+            summary: vCluster control plane pod crash-looping
+          expr: increase(kube_pod_container_status_restarts_total{vcluster_name!=""}[15m]) > 3
+          for: 5m
+          labels:
+            severity: critical
+        - alert: VclusterControlPlanePodNotReady
+          annotations:
+            description: Pod {{ $labels.pod }} in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) has been not-ready for 10 minutes.
+            summary: vCluster control plane pod not ready
+          expr: |
+            sum by (cluster, vcluster_project, vcluster_name, pod) (
+              kube_pod_status_phase{vcluster_name!="", phase!~"Running|Succeeded"}
+            ) > 0
+          for: 10m
+          labels:
+            severity: warning
+        - alert: VclusterControlPlaneOOMKilled
+          annotations:
+            description: Container {{ $labels.container }} in pod {{ $labels.pod }} (vcluster {{ $labels.vcluster_name }}, project {{ $labels.vcluster_project }}) was OOMKilled in the last 15 minutes.
+            summary: vCluster control plane pod OOMKilled
+          expr: increase(kube_pod_container_status_last_terminated_reason{reason="OOMKilled", vcluster_name!=""}[15m]) > 0
+          labels:
+            severity: warning
+    - name: vcluster-workload
+      rules:
+        - alert: VclusterCPUSaturation
+          annotations:
+            description: vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) has been running at {{ $value | humanizePercentage }} of its CPU requests for 15 minutes.
+            summary: vCluster CPU usage >80% of requests
+          expr: |
+            vcluster:pod_cpu:usage_5m
+              /
+            (sum by (cluster, vcluster_project, vcluster_name) (kube_pod_container_resource_requests{resource="cpu", vcluster_name!=""}) > 0)
+              > 0.80
+          for: 15m
+          labels:
+            severity: warning
+        - alert: VclusterMemorySaturation
+          annotations:
+            description: vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) is using {{ $value | humanizePercentage }} of its memory limits. OOM kills likely if sustained.
+            summary: vCluster memory usage >90% of limits
+          expr: |
+            vcluster:pod_memory:usage
+              /
+            (sum by (cluster, vcluster_project, vcluster_name) (kube_pod_container_resource_limits{resource="memory", vcluster_name!=""}) > 0)
+              > 0.90
+          for: 15m
+          labels:
+            severity: warning
+        - alert: VclusterPodCountDrop
+          annotations:
+            description: vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) lost more than half its running pods in the last 15 minutes.
+            summary: vCluster running pod count dropped >50% in 15m
+          expr: |
+            (
+              vcluster:pod:count - vcluster:pod:count offset 15m
+            ) / (vcluster:pod:count offset 15m + 0.01)
+              < -0.5
+          for: 5m
+          labels:
+            severity: warning

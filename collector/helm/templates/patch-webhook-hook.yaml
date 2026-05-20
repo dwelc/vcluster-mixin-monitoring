@@ -1,0 +1,89 @@
+{{/*
+  Workaround for an upstream OTel operator bug: its ValidatingWebhookConfiguration
+  rejects DELETE on OpenTelemetryCollector CRs in deployment+TargetAllocator mode,
+  which hangs the chart's pre-delete-job at uninstall time. This Job removes the
+  *delete* webhooks via JSON patch — both at post-install (so individual CR deletes
+  work) and at pre-delete (so chart uninstall completes). Weight -10 places it
+  before the chart's own pre-delete-job at weight 0.
+
+  Disable with `--set patchWebhook.enabled=false` if your operator is already patched.
+*/}}
+{{- $otelStack := index .Values "opentelemetry-kube-stack" -}}
+{{- if and (or (not (hasKey .Values "patchWebhook")) .Values.patchWebhook.enabled) $otelStack.enabled -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "vcluster-monitoring.name" . }}-patch-webhook-sa
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,pre-delete
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "vcluster-monitoring.name" . }}-patch-webhook
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,pre-delete
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingwebhookconfigurations"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "vcluster-monitoring.name" . }}-patch-webhook
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,pre-delete
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "vcluster-monitoring.name" . }}-patch-webhook-sa
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "vcluster-monitoring.name" . }}-patch-webhook
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "vcluster-monitoring.name" . }}-patch-webhook
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,pre-delete
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "vcluster-monitoring.name" . }}-patch-webhook-sa
+      containers:
+        - name: patch
+          image: bitnami/kubectl:latest
+          command: ["bash", "-c"]
+          args:
+            - |
+              WH="{{ .Release.Name }}-opentelemetry-operator-validation"
+              # Wait up to 5 min for the operator to register its *delete* webhooks.
+              for i in $(seq 1 150); do
+                kubectl get validatingwebhookconfiguration "$WH" \
+                  -o jsonpath='{range .webhooks[*]}{.name}{"\n"}{end}' 2>/dev/null \
+                  | grep -q delete && break
+                sleep 2
+              done
+              # JSON patch removes every *delete* webhook (reverse-indexed).
+              PATCH=$(kubectl get validatingwebhookconfiguration "$WH" \
+                -o jsonpath='{range .webhooks[*]}{.name}{"\n"}{end}' 2>/dev/null \
+                | awk '/delete/{print NR-1}' | sort -rn \
+                | awk 'BEGIN{printf "["} NR>1{printf ","} {printf "{\"op\":\"remove\",\"path\":\"/webhooks/%d\"}",$1} END{printf "]"}')
+              [ -z "$PATCH" ] || [ "$PATCH" = "[]" ] && exit 0
+              echo "Removing DELETE webhooks: $PATCH"
+              kubectl patch validatingwebhookconfiguration "$WH" --type=json -p="$PATCH"
+{{- end }}
