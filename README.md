@@ -12,6 +12,10 @@ separately:
 
 ## Architecture
 
+The OTel collector below is the **reference** label-enrichment path. The mixin itself
+only cares that your metrics carry the `vcluster_*` identity labels — any pipeline
+that produces them works equally well.
+
 ```
  ┌─────────────────────────┐
  │  Each tenant vCluster   │
@@ -45,6 +49,25 @@ separately:
                                 (dashboards)        (alerts firing)         rule series
 ```
 
+## Scrape modes
+
+Some deployments scrape only the vCluster **control planes** (per-tenant apiserver
+metrics via the [vCluster-published ServiceMonitor](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/control-plane/deployment/service-monitor));
+others also scrape the **workloads** running inside each
+tenant via cAdvisor. The mixin supports both via `_config.scrapeMode`:
+
+| Mode | Emits | Use when |
+| --- | --- | --- |
+| `'control-plane'` | `vcluster-apiserver` + `vcluster-controlplane` alert groups; the 3 `vcluster:apiserver_*` recording rules | You only have the vCluster apiserver ServiceMonitor in your scrape config — no cAdvisor enrichment. |
+| `'workload'` | `vcluster-controlplane` + `vcluster-workload` alert groups; the 3 `vcluster:pod_*` recording rules | You scrape cAdvisor with vCluster identity enrichment but don't scrape the tenant apiservers. Uncommon — usually paired. |
+| `'both'` (default) | All 3 alert groups, all 6 recording rules | Full pipeline (e.g. the reference OTel collector below). |
+
+Dashboards always render in any mode — panels referencing unavailable metrics
+just show "No data". The `vcluster-controlplane` alert group uses kube-state-metrics
+and is emitted in every mode (it depends on `vcluster_*` labels being attached to
+`kube_pod_*` series; verify your enrichment covers kube-state-metrics output if
+you want these alerts to fire).
+
 ## Quickstart — just the mixin
 
 If your pipeline already adds `vcluster_name`, `vcluster_project`, etc. labels
@@ -73,6 +96,14 @@ In your top-level mixin entry point:
     },
     grafanaTags: ['vcluster', 'monitoring-mixin'],  // appended to source tags
     datasource: 'prometheus',                       // your Grafana datasource UID
+
+    // Pick which alert groups + recording rules get emitted. See "Scrape modes" above.
+    scrapeMode: 'both',                             // 'control-plane' | 'workload' | 'both'
+
+    // Metric used by dashboard template-variable dropdowns (cluster/project/vcluster).
+    // Default is always-present on apiserver scrapes; only override if your pipeline
+    // strips it or you need a different label-carrier metric.
+    templateMetric: 'kubernetes_build_info',
   },
 }
 ```
@@ -108,7 +139,7 @@ See [`collector/README.md`](collector/README.md) for the full values reference.
 
 ## What the mixin produces
 
-`make build` (or running `mixtool generate all`) emits:
+`make build` (or running `mixtool generate all`) emits (counts shown for default `scrapeMode: 'both'`):
 
 | File | Contents |
 | --- | --- |
@@ -116,6 +147,8 @@ See [`collector/README.md`](collector/README.md) for the full values reference.
 | `examples/prometheus-alerts.yaml` | 9 alerts across 3 groups: `vcluster-apiserver`, `vcluster-controlplane`, `vcluster-workload`. Severity = `warning` or `critical` per kube-mixin convention. |
 | `examples/dashboards/vcluster-projects.json` | Platform-admin overview: per-project summary, resource usage, API health. 19 panels. |
 | `examples/dashboards/vcluster-detail.json` | Per-vCluster drill-down: control plane health, workloads, pods, CPU/memory. 34 panels. |
+
+`scrapeMode: 'control-plane'` and `'workload'` each drop one alert group + 3 recording rules.
 
 ### Recording rules
 
@@ -173,16 +206,21 @@ Anything that speaks **Prometheus remote write**:
 
 ### "Mixin's queries return no data"
 
-Check that your metrics actually carry the vcluster identity labels:
+Check that your metrics actually carry the vcluster identity labels. Use the
+metric that matches your `scrapeMode`:
 
 ```bash
-# Should return at least one series:
+# scrapeMode='control-plane' or 'both' — apiserver scrapes must be enriched:
+curl 'https://your-backend/api/v1/query?query=count(kubernetes_build_info{vcluster_name!=""})'
+
+# scrapeMode='workload' or 'both' — cAdvisor scrapes must be enriched:
 curl 'https://your-backend/api/v1/query?query=count(container_cpu_usage_seconds_total{vcluster_name!=""})'
 ```
 
-If 0, your pipeline isn't enriching metrics with vcluster labels. Either deploy
-the reference collector from `collector/helm/` or replicate its `k8sattributes`
-processor configuration in your existing pipeline.
+If 0, your pipeline isn't enriching the relevant scrape targets with vcluster
+labels. Either deploy the reference collector from `collector/helm/`, or
+replicate its `k8sattributes` processor configuration in your existing pipeline
+(Grafana Alloy, vmagent + relabel rules, custom OTel collector, etc.).
 
 ### "Operator rejects my Collector CR on upgrade"
 

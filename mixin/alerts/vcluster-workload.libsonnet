@@ -1,6 +1,8 @@
+// Workload alerts depend on cAdvisor + kube-state-metrics + the vcluster:pod_* recording
+// rules. Omitted when scrapeMode == 'control-plane'.
 {
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if $._config.scrapeMode == 'control-plane' then [] else [
       {
         name: 'vcluster-workload',
         rules: [

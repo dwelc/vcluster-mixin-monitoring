@@ -746,7 +746,7 @@
         "allValue": ".*",
         "current": { "selected": true, "text": "All", "value": "$__all" },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
-        "definition": "label_values(container_cpu_usage_seconds_total{vcluster_name!=\"\"}, cluster)",
+        "definition": "label_values(kubernetes_build_info{vcluster_name!=\"\"}, cluster)",
         "description": "Filter by cluster",
         "includeAll": true,
         "label": "Cluster",
@@ -754,7 +754,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(container_cpu_usage_seconds_total{vcluster_name!=\"\"}, cluster)",
+          "query": "label_values(kubernetes_build_info{vcluster_name!=\"\"}, cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -767,7 +767,7 @@
         "allValue": ".*",
         "current": { "selected": true, "text": "All", "value": "$__all" },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
-        "definition": "label_values(container_cpu_usage_seconds_total{vcluster_name!=\"\", cluster=~\"$cluster\"}, vcluster_project)",
+        "definition": "label_values(kubernetes_build_info{vcluster_name!=\"\", cluster=~\"$cluster\"}, vcluster_project)",
         "description": "Filter by project",
         "includeAll": true,
         "label": "Project",
@@ -775,7 +775,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(container_cpu_usage_seconds_total{vcluster_name!=\"\", cluster=~\"$cluster\"}, vcluster_project)",
+          "query": "label_values(kubernetes_build_info{vcluster_name!=\"\", cluster=~\"$cluster\"}, vcluster_project)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,

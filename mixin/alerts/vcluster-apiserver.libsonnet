@@ -1,6 +1,8 @@
+// Apiserver alerts derive from apiserver_request_* metrics + the vcluster:apiserver_*
+// recording rules built from them. Omitted when scrapeMode == 'workload' (no CP scrape).
 {
   prometheusAlerts+:: {
-    groups+: [
+    groups+: if $._config.scrapeMode == 'workload' then [] else [
       {
         name: 'vcluster-apiserver',
         rules: [
