@@ -104,6 +104,11 @@ In your top-level mixin entry point:
     // Default is always-present on apiserver scrapes; only override if your pipeline
     // strips it or you need a different label-carrier metric.
     templateMetric: 'kubernetes_build_info',
+
+    // Prometheus job label used by the vCluster Platform /metrics scrape. Only affects
+    // the vCluster Platform dashboard + alert group. Override if your scrape config
+    // names the job differently.
+    platformJob: 'loft-platform',
   },
 }
 ```
@@ -144,11 +149,12 @@ See [`collector/README.md`](collector/README.md) for the full values reference.
 | File | Contents |
 | --- | --- |
 | `examples/prometheus-rules.yaml` | 6 recording rules under group `vcluster.rules`. All metrics under the `vcluster:` namespace prefix (kube-mixin convention reserves `cluster:` for itself). |
-| `examples/prometheus-alerts.yaml` | 9 alerts across 3 groups: `vcluster-apiserver`, `vcluster-controlplane`, `vcluster-workload`. Severity = `warning` or `critical` per kube-mixin convention. |
+| `examples/prometheus-alerts.yaml` | 14 alerts across 4 groups: `vcluster-apiserver`, `vcluster-controlplane`, `vcluster-workload`, `vcluster-platform`. Severity = `warning` or `critical` per kube-mixin convention. |
 | `examples/dashboards/vcluster-projects.json` | Platform-admin overview: per-project summary, resource usage, API health. 19 panels. |
 | `examples/dashboards/vcluster-detail.json` | Per-vCluster drill-down: control plane health, workloads, pods, CPU/memory. 34 panels. |
+| `examples/dashboards/vcluster-platform.json` | vCluster Platform self-monitoring: API gateway, auth, controller-runtime, inventory. 20 panels. |
 
-`scrapeMode: 'control-plane'` and `'workload'` each drop one alert group + 3 recording rules.
+`scrapeMode: 'control-plane'` and `'workload'` each drop one alert group + 3 recording rules. The `vcluster-platform` group is independent of `scrapeMode` and always emitted (panels show "No data" if the platform's `/metrics` isn't being scraped).
 
 ### Recording rules
 
@@ -171,6 +177,85 @@ See [`collector/README.md`](collector/README.md) for the full values reference.
 
 `vcluster-workload`: `VclusterCPUSaturation`, `VclusterMemorySaturation`,
 `VclusterPodCountDrop`.
+
+`vcluster-platform`: `VclusterPlatformDown` (critical),
+`VclusterPlatformHighAPIErrorRate`, `VclusterPlatformHighAPILatency`,
+`VclusterPlatformAuthErrorSpike`, `VclusterPlatformControllerReconcileErrors`.
+
+## Monitoring the vCluster Platform itself
+
+In addition to per-vCluster monitoring, the mixin ships a `vCluster / Platform`
+dashboard + a `vcluster-platform` alert group that monitor the **management plane**
+— the Loft / vCluster Platform pod itself. It surfaces API gateway health, OIDC
+auth flow, controller-runtime reconciliation, and your project / vCluster
+inventory.
+
+This is independent of `scrapeMode` (the platform isn't a tenant), and the
+platform's `/metrics` endpoint is gated by a SubjectAccessReview on the
+non-resource URL `/metrics`. Your scrape agent's ServiceAccount needs:
+
+```yaml
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+```
+
+Most standard Prometheus/vmagent ClusterRoles already grant this.
+
+### Setting up the scrape
+
+Two viable approaches:
+
+1. **Enable the bundled ServiceMonitor** in the platform's helm values:
+
+   ```yaml
+   serviceMonitor:
+     enabled: true
+   ```
+
+   Your existing Prometheus / vmagent will pick it up via its ServiceMonitor
+   selectors. Simplest path if you're already running a generic agent.
+
+2. **Add a static scrape config to your OTel collector** (recommended if you
+   already have a tenant-scraping OTel collector — keeps all vcluster-fleet
+   metric config in one place). Add a second receiver + pipeline:
+
+   ```yaml
+   receivers:
+     prometheus/platform:
+       config:
+         scrape_configs:
+           - job_name: 'loft-platform'
+             kubernetes_sd_configs:
+               - role: endpoints
+                 namespaces:
+                   names: [vcluster-platform]
+             relabel_configs:
+               - source_labels: [__meta_kubernetes_service_label_loft_sh_service]
+                 regex: loft
+                 action: keep
+               - source_labels: [__meta_kubernetes_endpoint_port_name]
+                 regex: http
+                 action: keep
+             scheme: http
+             authorization:
+               credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+   service:
+     pipelines:
+       metrics/platform:
+         receivers: [prometheus/platform]
+         processors: [memory_limiter, resource/add_cluster, batch]
+         exporters: [prometheusremotewrite]
+   ```
+
+   Note this routes platform metrics through their **own** pipeline — they skip
+   the `k8sattributes` + `filter/vcluster_only` processors used for tenant
+   metrics (the platform has no vCluster identity to enrich).
+
+### Job label
+
+The dashboard + alerts default to `job="loft-platform"`. If your scrape config
+uses a different job name, override `_config.platformJob` to match.
 
 ## Building locally
 

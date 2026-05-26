@@ -99,3 +99,54 @@ groups:
           for: 5m
           labels:
             severity: warning
+    - name: vcluster-platform
+      rules:
+        - alert: VclusterPlatformDown
+          annotations:
+            description: Prometheus scrape of the vCluster Platform "{{ $labels.cluster }}" has been failing for 5 minutes.
+            summary: vCluster Platform target is down
+          expr: up{job="loft-platform"} == 0
+          for: 5m
+          labels:
+            severity: critical
+        - alert: VclusterPlatformHighAPIErrorRate
+          annotations:
+            description: API gateway in cluster "{{ $labels.cluster }}" has 5xx error rate {{ $value | humanizePercentage }} over the last 5 minutes.
+            summary: vCluster Platform API gateway returning >5% 5xx errors
+          expr: |
+            sum by (cluster) (rate(apigateway_kubernetes_request_total{job="loft-platform",code=~"5.."}[5m]))
+              /
+            sum by (cluster) (rate(apigateway_kubernetes_request_total{job="loft-platform"}[5m]))
+              > 0.05
+          for: 10m
+          labels:
+            severity: warning
+        - alert: VclusterPlatformHighAPILatency
+          annotations:
+            description: API gateway p99 latency in cluster "{{ $labels.cluster }}" is {{ $value | humanizeDuration }} — usually <100ms.
+            summary: vCluster Platform API p99 latency >1s
+          expr: |
+            histogram_quantile(0.99,
+              sum by (cluster, le) (
+                rate(apigateway_kubernetes_request_duration_seconds_bucket{job="loft-platform", verb!~"(?i)WATCH|WATCHLIST|PROXY|CONNECT"}[5m])
+              )
+            ) > 1
+          for: 15m
+          labels:
+            severity: warning
+        - alert: VclusterPlatformAuthErrorSpike
+          annotations:
+            description: Cluster "{{ $labels.cluster }}" is seeing {{ $value | humanize }} failed auth requests/sec (4xx/5xx on /auth/* paths) — investigate OIDC / login flow.
+            summary: vCluster Platform auth requests failing
+          expr: sum by (cluster) (rate(apigateway_auth_request_total{job="loft-platform",code=~"4..|5.."}[5m])) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+        - alert: VclusterPlatformControllerReconcileErrors
+          annotations:
+            description: Controller "{{ $labels.controller }}" in cluster "{{ $labels.cluster }}" has been failing reconciles at {{ $value | humanize }}/sec for 15 minutes.
+            summary: vCluster Platform controller failing to reconcile
+          expr: sum by (cluster, controller) (rate(controller_runtime_reconcile_errors_total{job="loft-platform"}[5m])) > 0
+          for: 15m
+          labels:
+            severity: warning

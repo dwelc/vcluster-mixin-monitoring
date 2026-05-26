@@ -34,5 +34,10 @@
     // 'kubernetes_build_info' is emitted by every apiserver scrape so it works in any
     // scrapeMode. Documented here — source JSON references this metric directly.
     templateMetric: 'kubernetes_build_info',
+
+    // Prometheus job label used by the vCluster Platform /metrics scrape. The reference
+    // OTel collector pipeline names it 'loft-platform'. Override if your scrape config
+    // uses a different job name. Only affects the vcluster-platform dashboard + alerts.
+    platformJob: 'loft-platform',
   },
 }
