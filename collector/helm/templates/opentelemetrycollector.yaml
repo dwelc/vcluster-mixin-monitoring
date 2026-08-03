@@ -79,6 +79,27 @@ spec:
                   regex: feature_node_kubernetes_io_.*
                 - source_labels: [__meta_kubernetes_node_name]
                   target_label: node
+            {{- if .Values.standaloneControlPlane.enabled }}
+            # Standalone CP apiserver is a host process (no pod, no k8sattributes identity);
+            # stamp vcluster_* labels at scrape time so filter/vcluster_only passes them.
+            - job_name: standalone-apiserver
+              scrape_interval: 30s
+              scheme: https
+              metrics_path: /metrics
+              authorization:
+                credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              tls_config:
+                insecure_skip_verify: true
+              static_configs:
+                - targets: ['kubernetes.default.svc:443']
+              relabel_configs:
+                - target_label: vcluster_name
+                  replacement: {{ .Values.standaloneControlPlane.name | default .Values.clusterName | quote }}
+                {{- if .Values.standaloneControlPlane.project }}
+                - target_label: vcluster_project
+                  replacement: {{ .Values.standaloneControlPlane.project | quote }}
+                {{- end }}
+            {{- end }}
     processors:
       memory_limiter:
         check_interval: 1s
@@ -146,7 +167,9 @@ spec:
       filter/vcluster_only:
         metrics:
           datapoint:
-            - 'resource.attributes["vcluster.name"] == nil'
+            # Passes pod-scraped series (resource identity) and standalone-CP series
+            # (scrape-time vcluster_name label).
+            - 'resource.attributes["vcluster.name"] == nil and attributes["vcluster_name"] == nil'
       resource/add_cluster:
         attributes:
           - action: upsert

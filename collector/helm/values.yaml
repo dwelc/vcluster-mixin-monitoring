@@ -32,6 +32,14 @@ image:
   repository: otel/opentelemetry-collector-contrib
   tag: "0.144.0"
 
+# Scrape a vCluster Standalone control plane (host-process apiserver, e.g. a bare-metal
+# level-1 cluster). Pod-based vcluster CPs are covered via ServiceMonitors; a standalone
+# apiserver is not a pod, so without this its metrics are never collected.
+standaloneControlPlane:
+  enabled: false
+  name: ""     # vcluster_name stamped on these series; defaults to clusterName
+  project: ""  # optional vcluster_project value, e.g. "infrastructure"
+
 # ServiceMonitor selector for the Target Allocator. The default {app: vcluster} matches
 # the ServiceMonitors that vCluster Platform creates per-tenant.
 serviceMonitorSelector:
