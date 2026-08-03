@@ -25,6 +25,23 @@ groups:
           for: 5m
           labels:
             severity: critical
+        - alert: VclusterAggregatedAPIDown
+          annotations:
+            description: APIService {{ $labels.name }} in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}, cluster {{ $labels.cluster }}) has been unavailable for most of the last 5m. Unavailable aggregated APIs stall discovery and degrade the whole apiserver.
+            summary: Aggregated APIService {{ $labels.name }} is unavailable
+          expr: |
+            max by (name, vcluster_name, vcluster_project, cluster) (avg_over_time(aggregator_unavailable_apiservice[5m])) > 0.5
+          for: 5m
+          labels:
+            severity: critical
+        - alert: VclusterAggregatedAPIErrors
+          annotations:
+            description: APIService {{ $labels.name }} in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) reported unavailable {{ $value | humanize }} times in 10m.
+            summary: Aggregated APIService {{ $labels.name }} is flapping
+          expr: |
+            sum by (name, vcluster_name, vcluster_project, cluster) (increase(aggregator_unavailable_apiservice_total[10m])) > 4
+          labels:
+            severity: warning
         - alert: VclusterAPIServerSlowRequests
           annotations:
             description: p99 request latency for apiserver in vcluster {{ $labels.vcluster_name }} (project {{ $labels.vcluster_project }}) is {{ $value | humanizeDuration }}.
