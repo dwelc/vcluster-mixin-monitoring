@@ -19,19 +19,21 @@
             },
           },
           {
-            // 5xx rate on the API gateway > 5% — the user-visible API surface is broken.
+            // 5xx rate on the API gateway > 5%, per proxy target (management/cluster/vcluster).
+            // Watches excluded: the gateway records every normal watch termination as 500.
+            // code="0" (hijacked exec/console streams) excluded from the denominator.
             alert: 'VclusterPlatformHighAPIErrorRate',
             expr: |||
-              sum by (%s) (rate(apigateway_kubernetes_request_total{job="%s",code=~"5.."}[5m]))
+              sum by (%s, target) (rate(apigateway_kubernetes_request_total{job="%s",code=~"5..",verb!~"(?i)WATCH|WATCHLIST|PROXY|CONNECT"}[5m]))
                 /
-              sum by (%s) (rate(apigateway_kubernetes_request_total{job="%s"}[5m]))
+              sum by (%s, target) (rate(apigateway_kubernetes_request_total{job="%s",code!="0",verb!~"(?i)WATCH|WATCHLIST|PROXY|CONNECT"}[5m]))
                 > 0.05
             ||| % [$._config.clusterLabel, $._config.platformJob, $._config.clusterLabel, $._config.platformJob],
             'for': '10m',
             labels: { severity: 'warning' },
             annotations: {
               summary: 'vCluster Platform API gateway returning >5% 5xx errors',
-              description: 'API gateway in cluster "{{ $labels.%s }}" has 5xx error rate {{ $value | humanizePercentage }} over the last 5 minutes.' % $._config.clusterLabel,
+              description: 'API gateway in cluster "{{ $labels.%s }}" has 5xx error rate {{ $value | humanizePercentage }} on {{ $labels.target }} requests (watches excluded) over the last 5 minutes.' % $._config.clusterLabel,
             },
           },
           {

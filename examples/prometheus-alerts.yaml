@@ -128,12 +128,12 @@ groups:
             severity: critical
         - alert: VclusterPlatformHighAPIErrorRate
           annotations:
-            description: API gateway in cluster "{{ $labels.cluster }}" has 5xx error rate {{ $value | humanizePercentage }} over the last 5 minutes.
+            description: API gateway in cluster "{{ $labels.cluster }}" has 5xx error rate {{ $value | humanizePercentage }} on {{ $labels.target }} requests (watches excluded) over the last 5 minutes.
             summary: vCluster Platform API gateway returning >5% 5xx errors
           expr: |
-            sum by (cluster) (rate(apigateway_kubernetes_request_total{job="loft-platform",code=~"5.."}[5m]))
+            sum by (cluster, target) (rate(apigateway_kubernetes_request_total{job="loft-platform",code=~"5..",verb!~"(?i)WATCH|WATCHLIST|PROXY|CONNECT"}[5m]))
               /
-            sum by (cluster) (rate(apigateway_kubernetes_request_total{job="loft-platform"}[5m]))
+            sum by (cluster, target) (rate(apigateway_kubernetes_request_total{job="loft-platform",code!="0",verb!~"(?i)WATCH|WATCHLIST|PROXY|CONNECT"}[5m]))
               > 0.05
           for: 10m
           labels:
